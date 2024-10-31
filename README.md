@@ -69,7 +69,7 @@ cd BiliRoamingX
 
 ## 📃 Licence
 
-[![GitHub](https://img.shields.io/github/license/BiliRoamingX/BiliRoamingX?style=for-the-badge)](https://github.com/BiliRoamingX/BiliRoamingX/blob/main/LICENSE)
+[![GitHub](https://img.shields.io/github/license/TC999/BiliRoamingX-r?style=for-the-badge)](LICENSE)
 
 <div align="right">
 <table><td>
