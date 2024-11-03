@@ -1,0 +1,456 @@
+name: Build Bilix
+
+on:
+  workflow_dispatch:
+jobs:
+  Build-Bilix:
+    strategy:
+      fail-fast: false
+    env:
+      # build need
+      Build-Bilix: true
+      Build-Bilix-play: false
+      # Check ver
+      Bilix-ver: 8.11.0
+      Bilix-play-ver: 3.19.2
+      Bilix-vercode: 8110200
+      Bilix-play-vercode: 7750600
+      # push type
+      Nightly: false
+      # torelease
+      Bilix-torelease: false
+      Bilix-play-torelease: false
+      # Changelog need
+      push-Changelog: true
+      # release type
+      Bilix-prerelease: true
+      Bilix-play-prerelease: true
+
+    runs-on: ubuntu-latest
+    steps:
+
+      # Check repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Get $publishTime
+      - name: Get Current Time
+        run: |
+          TIME=$EPOCHSECONDS
+          echo "TIME=$TIME" >> $GITHUB_ENV
+
+      - name: Setup JRE
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          java-package: 'jre'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9.x'
+
+      # Get ci & revanced-cli
+      - name: Get build resource
+        run: |
+          echo Downloading CI zip
+          git clone --recurse-submodules https://github.com/sti-233/BiliRoamingX.git
+          cp -r ./BiliRoamingX/* ./
+          echo Downloading modified revanced-cli
+          wget https://github.com/zjns/revanced-cli/releases/download/v4.6.0.1/revanced-cli.jar
+
+      - name: Cat commit ids
+        if: ${{ env.push-Changelog == 'true' }}
+        run: echo "old-commit-id=$(head -n 1 old-commit-id.txt)" >> $GITHUB_ENV
+
+      # Get BiliRoamingX ci Changelog
+      - name: Get Changelog from commits
+        if: ${{ env.push-Changelog == 'true' }}
+        run: |
+          mkdir -p ./changelog
+          cd ./changelog/
+          git clone --recurse-submodules https://github.com/BiliRoamingX/BiliRoamingX.git
+          cd BiliRoamingX
+          git log --oneline 66dc0506fec98441cb1156f57989fc42c9649fb0...HEAD | sed 's/^[0-9a-f]\{8\} /- /' > Changelog.txt
+          cd /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/
+          ls -al /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/changelog/BiliRoamingX
+          cp /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/changelog/BiliRoamingX/Changelog.txt /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/Changelog.txt
+
+      # return nothing to Changelog
+      - name: val empty to Changelog
+        if: ${{ env.push-Changelog == 'false' }}
+        run: |
+          echo -e " - no changlog now " >> Changelog.txt
+
+      # Get original bilibili
+      - name: Get original bilibili
+        run: |
+          aria2c --out "cn.apk" https://dl.hdslb.com/mobile/pack/android64/15848828/iBiliPlayer-apinkRelease-8.11.0-b15848828.apk
+          aria2c --out "play.apk" https://d.apkpure.com/b/APK/com.bilibili.app.in?version=latest
+
+      # Check $version & $versionCode
+      - name: "Get Cn Info"
+        id: "apk-info-cn"
+        uses: "8Mi-Tech/get-apk-info-action@master"
+        with:
+          apkPath: "cn.apk"
+      - name: "Get Play Info"
+        id: "apk-info-play"
+        uses: "8Mi-Tech/get-apk-info-action@master"
+        with:
+          apkPath: "play.apk"
+        #版本号：${{steps.apk-info.outputs.versionNum}}
+        #版本代码：${{steps.apk-info.outputs.versionCode}}
+
+      - name: Check Bilibili ver
+        run: |
+          if [ "${{ steps.apk-info-cn.outputs.versionCode }}" == "${{ env.Bilix-vercode }}" ]; then
+            echo "CnCorrectVersionCode=true" >> $GITHUB_ENV
+          else
+            echo "CnCorrectVersionCode=false" >> $GITHUB_ENV
+          fi
+          if [ "${{ steps.apk-info-cn.outputs.versionNum }}" == "${{ env.Bilix-ver }}" ]; then
+            echo "CnCorrectVersion=true" >> $GITHUB_ENV
+          else
+            echo "CnCorrectVersion=false" >> $GITHUB_ENV
+          fi
+
+      - name: Check Bilibili-play ver
+        run: |
+          if [ "${{ steps.apk-info-play.outputs.versionCode }}" == "${{ env.Bilix-play-vercode }}" ]; then
+            echo "PlayCorrectVersionCode=true" >> $GITHUB_ENV
+          else
+            echo "PlayCorrectVersionCode=false" >> $GITHUB_ENV
+          fi
+          if [ "${{ steps.apk-info-play.outputs.versionNum }}" == "${{ env.Bilix-play-ver }}" ]; then
+            echo "PlayCorrectVersion=true" >> $GITHUB_ENV
+          else
+            echo "PlayCorrectVersion=false" >> $GITHUB_ENV
+          fi
+
+      - name: Check is Bilibili correct ver
+        run: |
+          if [ "${{ env.CnCorrectVersionCode }}" == "true" ] && [ "${{ env.CnCorrectVersion }}" == "true" ]; then
+            echo "CnCorrectVer=true" >> $GITHUB_ENV
+          else
+            echo "CnCorrectVer=false" >> $GITHUB_ENV
+          fi
+
+      - name: Check is Bilibili-play correct ver
+        run: |
+          if [ "${{ env.PlayCorrectVersionCode }}" == "true" ] && [ "${{ env.PlayCorrectVersion }}" == "true" ]; then
+            echo "PlayCorrectVer=true" >> $GITHUB_ENV
+          else
+            echo "PlayCorrectVer=false" >> $GITHUB_ENV
+          fi
+
+      - name: Check is correct ver
+        run: |
+          if [ "${{ env.CnCorrectVer }}" == "true" ] && [ "${{ env.PlayCorrectVer }}" == "true" ]; then
+            echo "correctVer=true" >> $GITHUB_ENV
+          else
+            echo "correctVer=false" >> $GITHUB_ENV
+          fi
+
+      # Get $patchVersion
+      - name: Get version
+        run: echo "ver=$(cat version.txt)" >> $GITHUB_ENV
+
+      # Get $patchVersionCode
+      - name: Get bigver
+        run: |
+          getbigver=$(echo ${{ env.ver }} | cut -d '.' -f 1-3)
+          bigver=$(echo "$getbigver" | awk -F. '{printf "%d0%d00%d\n", $1, $2, $3}')
+          echo "bigver=$bigver" >> $GITHUB_ENV
+
+      # get build resource in ci zip
+      - name: Unzip CI zip and Rename
+        run: |
+          unzip BiliRoamingX-CI-Build.zip
+          mv BiliRoamingX-integrations-${{ env.ver }}.apk integrations.apk
+          mv BiliRoamingX-patches-${{ env.ver }}.jar patches.jar
+
+      # build part
+      - name: Build Bilix
+        if: ${{ env.Build-Bilix == 'true' && env.CnCorrectVer == 'true'  }}
+        run: java -jar revanced-cli.jar patch --merge integrations.apk --patch-bundle patches.jar --signing-levels 1,2,3 cn.apk
+
+      - name: Build Bilix-play
+        if: ${{ env.Build-Bilix-play == 'true' && env.PlayCorrectVer == 'true'  }}
+        run: java -jar revanced-cli.jar patch --merge integrations.apk --patch-bundle patches.jar --signing-levels 1,2,3 play.apk
+
+      # named Bilix
+      - name: Rename Bilix
+        if: ${{ env.Build-Bilix == 'true' && env.correctVer == 'true'  }}
+        run: mv cn-patched.apk Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk
+
+      - name: Rename Bilix-play
+        if: ${{ env.Build-Bilix-play == 'true' && env.correctVer == 'true'  }}
+        run: mv play-patched.apk Bilix-play-${{ env.Bilix-play-ver }}-${{ env.ver }}@Aniruf_x.apk
+
+      # push Bilix to ci
+      - name: Upload Bilix (CI)
+        if: ${{ env.Build-Bilix == 'true' && env.correctVer == 'true'  }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk
+          path: ./Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk
+
+      - name: Upload Bilix-play (CI)
+        if: ${{ env.Build-Bilix-play == 'true' && env.correctVer == 'true'  }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bilix-play-${{ env.Bilix-play-ver }}-${{ env.ver }}@Aniruf_x.apk
+          path: ./Bilix-play-${{ env.Bilix-play-ver }}-${{ env.ver }}@Aniruf_x.apk
+
+      # Get $sn
+      - name: Get sn from Bilix
+        if: ${{ env.Build-Bilix == 'true' && env.correctVer == 'true' }}
+        run: |
+          sudo apt-get install aapt
+          aapt dump xmltree ./Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk AndroidManifest.xml > AndroidManifest_output_cn.txt
+          echo "cn-sn=$(grep "BUILD_SN" ./AndroidManifest_output_cn.txt -A 1 | grep "android:value" | cut -d'=' -f2 | cut -d')' -f2 | awk '{printf "%d\n", strtonum($1)}')" >> $GITHUB_ENV
+
+      - name: Get sn from Bilix-play
+        if: ${{ env.Build-Bilix-play == 'true' && env.correctVer == 'true'  }}
+        run: |
+          aapt dump xmltree ./Bilix-play-${{ env.Bilix-play-ver }}-${{ env.ver }}@Aniruf_x.apk AndroidManifest.xml > AndroidManifest_output_play.txt
+          echo "play-sn=$(grep "BUILD_SN" ./AndroidManifest_output_play.txt -A 1 | grep "android:value" | cut -d'=' -f2 | cut -d')' -f2 | awk '{printf "%d\n", strtonum($1)}')" >> $GITHUB_ENV
+
+      # Get $md5
+      - name: Get md5 from Bilix
+        if: ${{ env.Build-Bilix == 'true' && env.correctVer == 'true'  }}
+        run: |
+          echo "cn-md5=$(md5sum ./Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk | cut -d ' ' -f 1)" >> $GITHUB_ENV
+
+      - name: Get md5 from Bilix-play
+        if: ${{ env.Build-Bilix-play == 'true' && env.correctVer == 'true'  }}
+        run: |
+          echo "play-md5=$(md5sum ./Bilix-play-${{ env.Bilix-play-ver }}-${{ env.ver }}@Aniruf_x.apk | cut -d ' ' -f 1)" >> $GITHUB_ENV
+
+      # Get $size
+      - name: Get size from Bilix
+        if: ${{ env.Build-Bilix == 'true' && env.correctVer == 'true' }}
+        run: |
+          echo "cn-size=$(stat -c %s ./Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk)" >> $GITHUB_ENV
+
+      - name: Get size from Bilix-play
+        if: ${{ env.Build-Bilix-play == 'true' && env.correctVer == 'true'  }}
+        run: |
+          echo "play-size=$(stat -c %s ./Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk)" >> $GITHUB_ENV
+
+      # Release part
+      - name: Release Bilix
+        if: ${{ env.Bilix-torelease == 'true' && env.CnCorrectVer == 'true' && env.Build-Bilix == 'true' && env.Nightly == 'false' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+          prerelease: ${{ env.Bilix-prerelease }}
+          fail_on_unmatched_files: true
+          name: 'Bilix ${{ env.Bilix-ver }}(${{ env.Bilix-vercode }}) with BiliroamingX ${{ env.ver }}'
+          tag_name: 'android-v${{ env.Bilix-ver }}-b${{ env.cn-sn }}-p${{ env.ver }}'
+          body: |
+            版本信息：${{ env.Bilix-ver }} ${{ env.Bilix-vercode }} ${{ env.ver }} ${{ env.bigver }} ${{ env.cn-sn }} ${{ env.cn-size }} ${{ env.cn-md5 }} ${{ env.TIME }}
+             > 合并主分支
+             > Bump bili ver to ${{ env.Bilix-vercode }}
+          files: ./Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk
+        continue-on-error: true
+
+      - name: Release Bilix Changelog
+        if: ${{ env.Bilix-torelease == 'true' && env.CnCorrectVer == 'true' && env.Build-Bilix == 'true' && env.Nightly == 'false' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          append_body: true
+          token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+          prerelease: ${{ env.Bilix-prerelease }}
+          fail_on_unmatched_files: true
+          name: 'Bilix ${{ env.Bilix-ver }}(${{ env.Bilix-vercode }}) with BiliroamingX ${{ env.ver }}'
+          tag_name: 'android-v${{ env.Bilix-ver }}-b${{ env.cn-sn }}-p${{ env.ver }}'
+          body_path: /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/Changelog.txt
+
+      - name: Release Bilix-play
+        if: ${{ env.Bilix-play-torelease == 'true' && env.PlayCorrectVer == 'true' && env.Build-Bilix-play == 'true' && env.Nightly == 'false' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+          prerelease: ${{ env.Bilix-play-prerelease }}
+          fail_on_unmatched_files: true
+          name: 'Bilix play ${{ env.Bilix-play-ver }}(${{ env.Bilix-play-vercode }}) with BiliroamingX ${{ env.ver }}'
+          tag_name: 'android_i-v${{ env.Bilix-play-ver }}-b${{ env.play-sn }}-p${{ env.ver }}'
+          body: |
+            版本信息：${{ env.Bilix-play-ver }} ${{ env.Bilix-play-vercode }} ${{ env.ver }} ${{ env.bigver }} ${{ env.play-sn }} ${{ env.play-size }} ${{ env.play-md5 }} ${{ env.TIME }}
+             > 合并主分支
+             > Bump bili ver to ${{ env.Bilix-play-vercode }}
+          files: ./Bilix-play-${{ env.Bilix-play-ver }}-${{ env.ver }}@Aniruf_x.apk
+        continue-on-error: true
+
+      - name: Release Bilix-play Changelog
+        if: ${{ env.Bilix-play-torelease == 'true' && env.PlayCorrectVer == 'true' && env.Build-Bilix-play == 'true' && env.Nightly == 'false' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          append_body: true
+          token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+          prerelease: ${{ env.Bilix-play-prerelease }}
+          fail_on_unmatched_files: true
+          name: 'Bilix play ${{ env.Bilix-play-ver }}(${{ env.Bilix-play-vercode }}) with BiliroamingX ${{ env.ver }}'
+          tag_name: 'android_i-v${{ env.Bilix-play-ver }}-b${{ env.play-sn }}-p${{ env.ver }}'
+          body_path: /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/Changelog.txt
+
+      # Del Release Nightly ver
+      - name: Delete old Nightly Bilix
+        if: ${{ env.correctVer == 'true' && env.Nightly == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+        run: |
+          gh release view "Nightly" && gh release delete "Nightly" -y --cleanup-tag
+        continue-on-error: true
+      
+     # named Bilix-Nightly
+      - name: Rename Bilix-Nightly
+        if: ${{ env.Build-Bilix == 'true' && env.Build-Bilix-play == 'true' && env.correctVer == 'true' && env.Nightly == 'true' }}
+        run: |
+          mv Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk Bilix-cn-Nightly@Aniruf_x.apk
+          mv Bilix-play-${{ env.Bilix-play-ver }}-${{ env.ver }}@Aniruf_x.apk Bilix-play-Nightly@Aniruf_x.apk
+
+      # Release Nightly
+      - name: Release Bilix-Nightly
+        if: ${{ env.correctVer == 'true' && env.Nightly == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+          prerelease: true
+          fail_on_unmatched_files: false
+          name: 'Bilix Nightly - BiliRoamingX ${{ env.ver }}'
+          tag_name: 'Nightly'
+          body: |
+             ![Nightly.jpg](https://github.com/sti-233/Bilix-PreBuilds/blob/main/Nightly.jpg)
+             > 合并主分支
+             > Bump bili-cn ver to ${{ env.Bilix-vercode }}
+             > Bump bili-play ver to ${{ env.Bilix-play-vercode }}
+          files: |
+            ./Bilix-cn-Nightly@Aniruf_x.apk
+            ./Bilix-play-Nightly@Aniruf_x.apk
+        continue-on-error: true
+
+      - name: Release Bilix-Nightly Changelog
+        if: ${{ env.correctVer == 'true' && env.Nightly == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          append_body: true
+          token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+          prerelease: true
+          fail_on_unmatched_files: true
+          name: 'Bilix Nightly - BiliRoamingX ${{ env.ver }}'
+          tag_name: 'Nightly'
+          body_path: /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/Changelog.txt
+
+      # output Bilix informations
+      - name: Build Bilix Success
+        if: ${{ env.Build-Bilix == 'true' && env.CnCorrectVer == 'true' && env.Nightly == 'false' }}
+        run: |
+          echo "### Build Bilix Success" >> $GITHUB_STEP_SUMMARY
+          echo "版本信息：${{ env.Bilix-ver }} ${{ env.Bilix-vercode }} ${{ env.ver }} ${{ env.bigver }} ${{ env.cn-sn }} ${{ env.cn-size }} ${{ env.cn-md5 }} ${{ env.TIME }}" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo " > 合并主分支" >> $GITHUB_STEP_SUMMARY
+          echo " > Bump bili ver to ${{ env.Bilix-play-vercode }}" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo "$(cat /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/Changelog.txt)" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      - name: Build Bilix-play Success
+        if: ${{ env.Build-Bilix-play == 'true' && env.PlayCorrectVer == 'true' && env.Nightly == 'false' }}
+        run: |
+          echo "### Build Bilix-play Success" >> $GITHUB_STEP_SUMMARY
+          echo "版本信息：${{ env.Bilix-play-ver }} ${{ env.Bilix-play-vercode }} ${{ env.ver }} ${{ env.bigver }} ${{ env.play-sn }} ${{ env.play-size }} ${{ env.play-md5 }} ${{ env.TIME }}" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo " > 合并主分支" >> $GITHUB_STEP_SUMMARY
+          echo " > Bump bili ver to ${{ env.Bilix-play-vercode }}" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo "$(cat /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/Changelog.txt)" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      # output Nightly ver info
+      - name: Build Bilix-Nightly Success
+        if: ${{ env.correctVer == 'true' && env.Nightly == 'true' }}
+        run: |
+          echo "### Build Bilix-Nightly Success" >> $GITHUB_STEP_SUMMARY
+          echo "Cn版本信息：${{ env.Bilix-ver }} ${{ env.Bilix-vercode }} ${{ env.ver }} ${{ env.bigver }} ${{ env.cn-sn }} ${{ env.cn-size }} ${{ env.cn-md5 }} ${{ env.TIME }}" >> $GITHUB_STEP_SUMMARY
+          echo "play版本信息：${{ env.Bilix-play-ver }} ${{ env.Bilix-play-vercode }} ${{ env.ver }} ${{ env.bigver }} ${{ env.play-sn }} ${{ env.play-size }} ${{ env.play-md5 }} ${{ env.TIME }}" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo " > 合并主分支" >> $GITHUB_STEP_SUMMARY
+          echo " > Bump bili-cn ver to ${{ env.Bilix-vercode }}" >> $GITHUB_STEP_SUMMARY
+          echo " > Bump bili-play ver to ${{ env.Bilix-play-vercode }}" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo "$(cat /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/Changelog.txt)" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      - name: Prepare
+        run : |
+          mv ./Bilix-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk ./Bilix-Dev-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk
+          echo "Nightly_Changelog<<EOF" >> $GITHUB_ENV
+          cat /home/runner/work/Bilix-PreBuilds/Bilix-PreBuilds/Changelog.txt >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          echo "DEV_APK=./Bilix-Dev-${{ env.Bilix-ver }}-${{ env.ver }}@Aniruf_x.apk" >> $GITHUB_ENV
+          pip install pyrogram tgcrypto
+
+      - name: Send to Telegram
+        shell: python
+        env:
+          API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          SESSION: ${{ secrets.TELEGRAM_SESSION }}
+        run: |
+          import asyncio
+          import inspect
+          import os
+          from pyrogram import Client
+          from pyrogram.types import InputMediaDocument
+          async def main():
+            session = os.environ["SESSION"]
+            bot = Client(
+              "client",
+              session_string=session,
+            )
+            async with bot:
+              RoamingXver = os.environ["ver"]
+              ver = os.environ["Bilix-ver"]
+              ver_code = os.environ["Bilix-vercode"]
+              chat_id = os.environ["CHANNEL_ID"]
+              changelog = os.environ["Nightly_Changelog"]
+              msg_p1 = f"Bilix Dev"
+              msg_p2 = f"BiliRoamingX {RoamingXver}"
+              msg_p3 = f"<pre>cn {ver} {ver_code}</pre>"
+              msg_p4 = "New release to GitHub!<pre>"
+              msg_p5 = inspect.cleandoc("""
+              > 合并 sti-233/BiliRoamingX
+               *现在具有切换更新源的能力\n
+              """)
+              msg_p6 = f"{changelog}</pre>"
+              msg_p7 = inspect.cleandoc("""
+              by sti-233
+              在Github查看详情
+              
+              *此为非官方构建
+              Patched by @Aniruf_x
+              #Biliroaming_X #dev
+              """)
+              caption = "{}\n\n{}\n{}\n\n{}\n{}\n{}{}".format(msg_p1, msg_p2, msg_p3, msg_p4, msg_p5, msg_p6, msg_p7)
+              dev = InputMediaDocument(media=os.environ["DEV_APK"], caption=caption)
+              # 发送到指定的频道
+              await bot.send_media_group(
+                chat_id=chat_id,
+                media=[dev],
+              )
+          async def wait():
+            try:
+              await asyncio.wait_for(main(), timeout=600)
+            except asyncio.TimeoutError:
+              print("message send timeout!!!")
+              exit(1)
+          asyncio.run(wait())
+
+      # Success
+      - name: End
+        run: echo "Build end."
